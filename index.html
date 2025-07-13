@@ -1,0 +1,179 @@
+// Google Apps Script Backend for CashFlow Prophet
+// Deploy as Web App with execute permissions: Anyone
+
+// 1. Create a Google Sheet first and get its ID
+const SHEET_ID = 'YOUR_GOOGLE_SHEET_ID_HERE'; // Replace with your sheet ID
+const SHEET_NAME = 'Users';
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    
+    if (data.action === 'joinWaitlist') {
+      return joinWaitlist(data.email);
+    } else if (data.action === 'saveForecast') {
+      return saveForecast(data);
+    }
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({success: false, message: 'Invalid action'}))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({success: false, message: error.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  const action = e.parameter.action;
+  
+  if (action === 'getWaitlistCount') {
+    return getWaitlistCount();
+  }
+  
+  return ContentService
+    .createTextOutput(JSON.stringify({success: false, message: 'Invalid action'}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function joinWaitlist(email) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
+    
+    // Check if email already exists
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === email) {
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Email already registered'}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    
+    // Add new email
+    sheet.appendRow([email, new Date(), 'waitlist']);
+    
+    // Send welcome email
+    sendWelcomeEmail(email);
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({success: true, message: 'Successfully joined waitlist'}))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({success: false, message: error.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function saveForecast(data) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Forecasts');
+    
+    sheet.appendRow([
+      data.email || 'anonymous',
+      new Date(),
+      data.revenue,
+      data.expenses,
+      data.currentCash,
+      data.seasonality,
+      data.forecast30,
+      data.forecast90,
+      data.riskLevel
+    ]);
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({success: true, message: 'Forecast saved'}))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({success: false, message: error.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function getWaitlistCount() {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
+    const count = sheet.getLastRow() - 1; // Subtract header row
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({success: true, count: count}))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({success: false, count: 1247}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function sendWelcomeEmail(email) {
+  try {
+    const subject = "Welcome to CashFlow Prophet! 🚀";
+    const body = `
+Hi there!
+
+Thank you for joining the CashFlow Prophet waitlist! 
+
+You're now part of an exclusive group of forward-thinking business owners who refuse to let cash flow problems kill their dreams.
+
+Here's what happens next:
+• We'll notify you the moment we launch (targeting next week!)
+• As a waitlist member, you get 50% off for life
+• You'll receive cash flow tips and strategies weekly
+
+Quick question: What's your biggest cash flow challenge right now? Hit reply and let me know!
+
+Best,
+The CashFlow Prophet Team
+
+P.S. - Share this with other business owners. They'll thank you later: https://your-domain.com
+    `;
+    
+    MailApp.sendEmail(email, subject, body);
+  } catch (error) {
+    console.log('Email sending failed:', error);
+  }
+}
+
+// Setup function - run this once to create the sheets
+function setupSheets() {
+  const sheet = SpreadsheetApp.create('CashFlow Prophet Database');
+  
+  // Users sheet
+  const usersSheet = sheet.getSheetByName('Sheet1');
+  usersSheet.setName('Users');
+  usersSheet.getRange(1, 1, 1, 3).setValues([['Email', 'Date Joined', 'Status']]);
+  
+  // Forecasts sheet
+  const forecastSheet = sheet.insertSheet('Forecasts');
+  forecastSheet.getRange(1, 1, 1, 9).setValues([
+    ['Email', 'Date', 'Revenue', 'Expenses', 'Current Cash', 'Seasonality', 'Forecast 30', 'Forecast 90', 'Risk Level']
+  ]);
+  
+  console.log('Sheet ID:', sheet.getId());
+  console.log('Update the SHEET_ID variable with:', sheet.getId());
+  
+  return sheet.getId();
+}
+
+// STEP-BY-STEP SETUP INSTRUCTIONS:
+// 1. Go to script.google.com
+// 2. Click "New Project"
+// 3. Delete the default code and paste ALL the code above
+// 4. Click the function dropdown and select "setupSheets"
+// 5. Click the Run button (▶️)
+// 6. Authorize the script when prompted
+// 7. Check the logs (View > Logs) to see the Sheet ID
+// 8. Copy that Sheet ID and replace YOUR_GOOGLE_SHEET_ID_HERE above
+// 9. Save the script (Ctrl+S)
+// 10. Deploy as Web App (Deploy > New Deployment)
+//     - Type: Web App
+//     - Execute as: Me
+//     - Access: Anyone
+// 11. Copy the web app URL for your frontend
